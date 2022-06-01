@@ -118,6 +118,7 @@ control MyIngress(inout headers hdr,
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
+    /* this action is tunnel header generator */
     action myTunnel_ingress(bit<16> dst_id) {
         hdr.myTunnel.setValid();
         hdr.myTunnel.dst_id = dst_id;
@@ -126,10 +127,12 @@ control MyIngress(inout headers hdr,
         ingressTunnelCounter.count((bit<32>) hdr.myTunnel.dst_id);
     }
 
+    /* this action is tunnel header forwarder */
     action myTunnel_forward(egressSpec_t port) {
         standard_metadata.egress_spec = port;
     }
 
+    /* this action is tunnel header consumer */
     action myTunnel_egress(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
         hdr.ethernet.dstAddr = dstAddr;
