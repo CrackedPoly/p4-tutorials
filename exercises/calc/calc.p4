@@ -40,13 +40,6 @@
 #include <core.p4>
 #include <v1model.p4>
 
-/*
- * Define the headers the program will recognize
- */
-
-/*
- * Standard Ethernet header
- */
 header ethernet_t {
     bit<48> dstAddr;
     bit<48> srcAddr;
@@ -68,32 +61,21 @@ const bit<8>  P4CALC_OR    = 0x7c;   // '|'
 const bit<8>  P4CALC_CARET = 0x5e;   // '^'
 
 header p4calc_t {
+    bit<8>  p;
+    bit<8>  four;
+    bit<8>  version;
     bit<8>  op;
-/* TODO
- * fill p4calc_t header with P, four, ver, op, operand_a, operand_b, and res
-   entries based on above protocol header definition.
- */
+    bit<32> operand1;
+    bit<32> operand2;
+    bit<32> result;
 }
 
-/*
- * All headers, used in the program needs to be assembled into a single struct.
- * We only need to declare the type, but there is no need to instantiate it,
- * because it is done "by the architecture", i.e. outside of P4 functions
- */
 struct headers {
     ethernet_t   ethernet;
     p4calc_t     p4calc;
 }
 
-/*
- * All metadata, globally used in the program, also  needs to be assembled
- * into a single struct. As in the case of the headers, we only need to
- * declare the type, but there is no need to instantiate it,
- * because it is done "by the architecture", i.e. outside of P4 functions
- */
-
 struct metadata {
-    /* In our case it is empty */
 }
 
 /*************************************************************************
@@ -112,15 +94,19 @@ parser MyParser(packet_in packet,
     }
 
     state check_p4calc {
-        /* TODO: just uncomment the following parse block */
-        /*
+        // The state transition below is also applicable.
+        // packet.extract(hdr.p4calc);
+        // transition select(hdr.p4calc.p, hdr.p4calc.four, hdr.p4calc.version) {
+        //     (P4CALC_P, P4CALC_4, P4CALC_VER)    : accept;
+        //     default: accept;
+        // }
+
         transition select(packet.lookahead<p4calc_t>().p,
         packet.lookahead<p4calc_t>().four,
-        packet.lookahead<p4calc_t>().ver) {
+        packet.lookahead<p4calc_t>().version) {
             (P4CALC_P, P4CALC_4, P4CALC_VER) : parse_p4calc;
             default                          : accept;
         }
-        */
     }
 
     state parse_p4calc {
@@ -144,34 +130,36 @@ control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
     action send_back(bit<32> result) {
-        /* TODO
-         * - put the result back in hdr.p4calc.res
-         * - swap MAC addresses in hdr.ethernet.dstAddr and
-         *   hdr.ethernet.srcAddr using a temp variable
-         * - Send the packet back to the port it came from
-             by saving standard_metadata.ingress_port into
-             standard_metadata.egress_spec
-         */
+        hdr.p4calc.result = result;
+        bit<48> tmp = hdr.ethernet.dstAddr;
+        hdr.ethernet.dstAddr = hdr.ethernet.srcAddr;
+        hdr.ethernet.srcAddr = tmp;
+        standard_metadata.egress_spec = standard_metadata.ingress_port;
     }
 
     action operation_add() {
         /* TODO call send_back with operand_a + operand_b */
+        send_back(hdr.p4calc.operand1 + hdr.p4calc.operand2);
     }
 
     action operation_sub() {
         /* TODO call send_back with operand_a - operand_b */
+        send_back(hdr.p4calc.operand1 - hdr.p4calc.operand2);
     }
 
     action operation_and() {
         /* TODO call send_back with operand_a & operand_b */
+        send_back(hdr.p4calc.operand1 & hdr.p4calc.operand2);
     }
 
     action operation_or() {
         /* TODO call send_back with operand_a | operand_b */
+        send_back(hdr.p4calc.operand1 | hdr.p4calc.operand2);
     }
 
     action operation_xor() {
         /* TODO call send_back with operand_a ^ operand_b */
+        send_back(hdr.p4calc.operand1 ^ hdr.p4calc.operand2);
     }
 
     action operation_drop() {
