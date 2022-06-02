@@ -101,6 +101,8 @@ parser MyParser(packet_in packet,
 
     state parse_ipv4 {
         packet.extract(hdr.ipv4);
+        /* hdr.ipv4.ihl indicate the length of the ipv4 header, at least 5*4byte,
+            if larger, then parse the ipv4 option. */
         verify(hdr.ipv4.ihl >= 5, error.IPHeaderTooShort);
         transition select(hdr.ipv4.ihl) {
             5             : accept;
@@ -110,12 +112,16 @@ parser MyParser(packet_in packet,
 
     state parse_ipv4_option {
         /*
-        * TODO: Add logic to:
+        * DONE: Add logic to:
         * - Extract the ipv4_option header.
         *   - If value is equal to IPV4_OPTION_MRI, transition to parse_mri.
         *   - Otherwise, accept.
         */
-        transition accept;
+        packet.extract(hdr.ipv4_option);
+        transition select(hdr.ipv4_option.option) {
+            IPV4_OPTION_MRI : parse_mri;
+            default         : accept;
+        }
     }
 
     state parse_mri {
@@ -127,7 +133,12 @@ parser MyParser(packet_in packet,
         *   - If the value is equal to 0, accept.
         *   - Otherwise, transition to parse_swtrace.
         */
-        transition accept;
+        packet.extract(hdr.mri);
+        meta.parser_metadata.remaining = hdr.mri.count;
+        transition select(meta.parser_metadata.remaining) {
+            0       : accept;
+            default : parse_swtrace;
+        }
     }
 
     state parse_swtrace {
@@ -139,7 +150,12 @@ parser MyParser(packet_in packet,
         *   - If the value is equal to 0, accept.
         *   - Otherwise, transition to parse_swtrace.
         */
-        transition accept;
+        packet.extract(hdr.swtraces.next);
+        meta.parser_metadata.remaining = meta.parser_metadata.remaining - 1;
+        transition select(meta.parser_metadata.remaining) {
+            0       : accept;
+            default : parse_swtrace;
+        }
     }
 }
 
@@ -209,6 +225,15 @@ control MyEgress(inout headers hdr,
         - Increment hdr.ipv4.totalLen by 8
         - Increment hdr.ipv4_option.optionLength by 8
         */
+        hdr.mri.count = hdr.mri.count + 1;
+        hdr.swtraces.push_front(1);
+        /* Pushed elements are invalid initially */
+        hdr.swtraces[0].setValid();
+        hdr.swtraces[0].swid = swid;
+        hdr.swtraces[0].qdepth = (qdepth_t)standard_metadata.deq_qdepth;
+        hdr.ipv4.ihl = hdr.ipv4.ihl + 2;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen + 8;
+        hdr.ipv4_option.optionLength = hdr.ipv4_option.optionLength + 8;
     }
 
     table swtrace {
@@ -226,7 +251,9 @@ control MyEgress(inout headers hdr,
         * - If hdr.mri is valid:
         *   - Apply table swtrace
         */
-        swtrace.apply();
+        if(hdr.mri.isValid()) {
+            swtrace.apply();
+        }
     }
 }
 
@@ -262,6 +289,9 @@ control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv4);
+        packet.emit(hdr.ipv4_option);
+        packet.emit(hdr.mri);
+        packet.emit(hdr.swtraces);
 
         /* TODO: emit ipv4_option, mri and swtraces headers */
     }
