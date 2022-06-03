@@ -36,12 +36,13 @@ header ethernet_t {
 }
 
 /*
- * TODO: split tos to two fields 6 bit diffserv and 2 bit ecn
+ * DONE: split tos to two fields 6 bit diffserv and 2 bit ecn
  */
 header ipv4_t {
     bit<4>    version;
     bit<4>    ihl;
-    bit<8>    tos;
+    bit<6>    diffserv;
+    bit<2>    ecn;
     bit<16>   totalLen;
     bit<16>   identification;
     bit<3>    flags;
@@ -117,8 +118,14 @@ control MyIngress(inout headers hdr,
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
-/* TODO: Implement actions for different traffic classes */
+/* DONE: Implement actions for different traffic classes */
+    action set_diffserv_udp() {
+        hdr.ipv4.diffserv = 46;
+    }
 
+    action set_diffserv_tcp() {
+        hdr.ipv4.diffserv = 44;
+    }
 
     table ipv4_lpm {
         key = {
@@ -133,9 +140,15 @@ control MyIngress(inout headers hdr,
         default_action = NoAction();
     }
 
-/* TODO: set hdr.ipv4.diffserv on the basis of protocol */
+/* DONE: set hdr.ipv4.diffserv on the basis of protocol */
     apply {
         if (hdr.ipv4.isValid()) {
+            if (hdr.ipv4.protocol == IP_PROTOCOLS_UDP) {
+                set_diffserv_udp();
+            }
+            else if (hdr.ipv4.protocol == IP_PROTOCOLS_TCP) {
+                set_diffserv_tcp();
+            }
             ipv4_lpm.apply();
         }
     }
@@ -158,12 +171,13 @@ control MyEgress(inout headers hdr,
 
 control MyComputeChecksum(inout headers hdr, inout metadata meta) {
     apply {
-        /* TODO: replace tos with diffserv and ecn */
+        /* DONE: replace tos with diffserv and ecn */
         update_checksum(
             hdr.ipv4.isValid(),
             { hdr.ipv4.version,
               hdr.ipv4.ihl,
-              hdr.ipv4.tos,
+              hdr.ipv4.diffserv,
+              hdr.ipv4.ecn,
               hdr.ipv4.totalLen,
               hdr.ipv4.identification,
               hdr.ipv4.flags,
